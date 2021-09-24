@@ -5,10 +5,10 @@ ARG ECLIPSE_IMAGE
 ARG CONTEXT_PATH=eclipse
 
 # The path of mirror content. e.g. rt/rap/3.5, releases/photon
-ARG content-path
+ARG CONTENT_PATH
 
 # Local mirror path for publish
-ARG LOCAL_MIRROR_PATH=/usr/share/nginx/html/$CONTEXT_PATH/$content-path
+ARG LOCAL_MIRROR_PATH=/usr/share/nginx/html/$CONTEXT_PATH/$CONTENT_PATH
 
 ########
 #  build mirror
