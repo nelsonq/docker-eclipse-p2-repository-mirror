@@ -1,52 +1,56 @@
 # Provides eclipse p2 repository mirroring service powered by nginx with specific eclipse p2 repository
 
-ARG FROM_IMAGE_OF_ECLIPSE_APPLICATION
-ARG MIRROR_SOURCE_NAME
-ARG MIRROR_ROOT_PATH=/root/eclipse-mirror
-ARG MIRROR_DESTINATION_PATH=$MIRROR_ROOT_PATH/$MIRROR_SOURCE_NAME
-FROM $FROM_IMAGE_OF_ECLIPSE_APPLICATION as eclipse-application
+ARG ECLIPSE_IMAGE
 
-ARG MIRROR_ROOT_PATH
-ARG MIRROR_SOURCE_URL
-ARG MIRROR_DESTINATION_PATH
+ARG CONTEXT_PATH=eclipse
 
-RUN test -n $MIRROR_SOURCE_URL
-RUN test -n $MIRROR_SOURCE_NAME
-RUN test -n $MIRROR_ROOT_PATH
-RUN test -n $MIRROR_DESTINATION_PATH
+# The path of mirror content. e.g. rt/rap/3.5, releases/photon
+ARG CONTENT_PATH
 
-RUN echo "The mirror source url is $MIRROR_SOURCE_URL"
-RUN echo "The mirror source name is $MIRROR_SOURCE_NAME"
-RUN echo "The mirror root path is $MIRROR_ROOT_PATH"
-RUN echo "The mirror destination path is $MIRROR_DESTINATION_PATH"
+# Local mirror path for publish
+ARG LOCAL_MIRROR_PATH=/usr/share/nginx/html/$CONTEXT_PATH/$CONTENT_PATH
 
-RUN mkdir -p $MIRROR_DESTINATION_PATH
+########
+#  build mirror
+########
+
+FROM $ECLIPSE_IMAGE as eclipse
+
+ARG LOCAL_MIRROR_PATH
+ARG REMOTE_MIRROR_URL
+ARG DRYRUN=false
+
+RUN test -n $REMOTE_MIRROR_URL
+
+RUN mkdir -p $LOCAL_MIRROR_PATH
+
+SHELL ["/bin/bash", "-c"]
 
 # mirroring eclipse p2 metadata
-RUN /opt/eclipse/eclipse -nosplash -verbose \
+RUN if [[ "$DRYRUN" != "true" ]] ; then \ 
+    /opt/eclipse/eclipse -nosplash -verbose \
     -application org.eclipse.equinox.p2.metadata.repository.mirrorApplication \
-    -source $MIRROR_SOURCE_URL \
-    -destination file:$MIRROR_DESTINATION_PATH
+    -source $REMOTE_MIRROR_URL \
+    -destination file:$LOCAL_MIRROR_PATH ; \
+    fi
 
 # mirroring eclipse p2 artifacts
-RUN /opt/eclipse/eclipse -nosplash -verbose \
+RUN if [[ "$DRYRUN" != "true" ]] ; then \
+    /opt/eclipse/eclipse -nosplash -verbose \
     -application org.eclipse.equinox.p2.artifact.repository.mirrorApplication \
-    -source $MIRROR_SOURCE_URL \
-    -destination file:$MIRROR_DESTINATION_PATH
+    -source $REMOTE_MIRROR_URL \
+    -destination file:$LOCAL_MIRROR_PATH ; \
+    fi
+
+########
+#  deploy mirror
+########
 
 FROM nginx:1.21.3 
-ARG MIRROR_DESTINATION_PATH
-ARG MIRROR_SOURCE_NAME
 
-RUN test -n $MIRROR_DESTINATION_PATH
-RUN test -n $MIRROR_SOURCE_NAME
+ARG LOCAL_MIRROR_PATH
 
-RUN echo $MIRROR_DESTINATION_PATH
-RUN echo $MIRROR_SOURCE_NAME
-
-ENV SOURCE_MIRROR_DESTINATION_PATH=$MIRROR_DESTINATION_PATH
-ENV TARGET_MIRROR_DESTINATION_PATH=/usr/share/nginx/html/$MIRROR_SOURCE_NAME
-RUN mkdir -p $TARGET_MIRROR_DESTINATION_PATH 
+RUN mkdir -p $LOCAL_MIRROR_PATH
 
 # Deploy the downloaded eclipse p2 metadata and artifacts from last stage to a static content folder for public access
-COPY --from=eclipse-application $SOURCE_MIRROR_DESTINATION_PATH $TARGET_MIRROR_DESTINATION_PATH 
+COPY --from=eclipse $LOCAL_MIRROR_PATH $LOCAL_MIRROR_PATH
